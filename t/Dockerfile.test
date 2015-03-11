@@ -1,9 +1,10 @@
 FROM debian
 EXPOSE 5000
+EXPOSE 8080
 
 RUN env DEBIAN_FRONTEND=noninteractive apt-get update && \
     env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libplack-perl && \
     env DEBIAN_FRONTEND=noninteractive apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-ENTRYPOINT ["plackup", "-e", "sub { [200, [ content_type => 'text/plain' ], [ qq(name: $ENV{NAME}, URI: $_[0]{REQUEST_URI}) ]] }"]
+ENTRYPOINT ["plackup", "-e", "sub { [200, [ content_type => 'text/plain' ], [ qq(name: $ENV{NAME}, URI: $_[0]{REQUEST_URI}) ]] }", "-p"]

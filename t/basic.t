@@ -27,7 +27,7 @@ for (qw(cal feeds rss st)) {
          qw(docker run --rm),
          '--name', "$name-$parent",
          '-e',  "NAME=$name",
-         'httpd-test'
+         'httpd-test', ($name eq 'st' ? 8080 : 5000 )
       )
    }
 }
@@ -59,7 +59,7 @@ my (undef, $https_port) = split /:/,
 chomp($http_port);
 chomp($https_port);
 
-for (qw(cal feeds rss)) {
+for (qw(cal feeds rss st)) {
    my $name = $_;
    my $r = LWP::UserAgent->new(
       ssl_opts => {
