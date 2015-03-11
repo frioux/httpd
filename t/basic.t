@@ -5,8 +5,6 @@ use warnings;
 
 use Test::More;
 
-use IO::Async::Loop::Epoll;
-use IO::Async::Process;
 use IO::Socket::SSL 'SSL_VERIFY_NONE';
 use File::pushd;
 use IPC::System::Simple 'system';
@@ -20,32 +18,33 @@ capture {
    system(qw(docker build -f Dockerfile.test -t httpd-test .));
 };
 
-my $loop = IO::Async::Loop::Epoll->new;
+my $parent = $$;
+for (qw(cal feeds rss st)) {
+   next if fork;
+   my $name = $_;
+   capture {
+      exec(
+         qw(docker run --rm),
+         '--name', "$name-$parent",
+         '-e',  "NAME=$name",
+         'httpd-test'
+      )
+   }
+}
 
-$loop->add(my $cal   = _test_httpd('cal'));
-$loop->add(my $feeds = _test_httpd('feeds'));
-$loop->add(my $rss   = _test_httpd('rss'));
-$loop->add(my $st    = _test_httpd('st'));
+sleep 3;
 
-sleep 2;
-
-$loop->add(
-   my $main = IO::Async::Process->new(
-      command => [
-         qw(docker run --rm --name), "httpd-$$",
-         '--link',    "st-$$:st",
-         '--link',   "rss-$$:rss",
-         '--link',   "cal-$$:cal",
-         '--link', "feeds-$$:feeds",
-         '-P',
-         'httpd-test-main',
-      ],
-      on_exception => sub { die "httpd exited unexpectedly!" },
-      on_finish => sub {},
-      stdout => { on_read => sub {} },
-      stderr => { on_read => sub {} },
-   ),
-);
+capture {
+   exec(
+      qw(docker run --rm --name), "httpd-$parent",
+      '--link',    "st-$parent:st",
+      '--link',   "rss-$parent:rss",
+      '--link',   "cal-$parent:cal",
+      '--link', "feeds-$parent:feeds",
+      '-P',
+      'httpd-test-main',
+   )
+} unless fork;
 
 $SIG{INT} = sub { exit(1) };
 
@@ -60,53 +59,31 @@ my (undef, $https_port) = split /:/,
 chomp($http_port);
 chomp($https_port);
 
-my $cal_f   = _test_future('cal');
-my $feeds_f = _test_future('feeds');
-my $rss_f   = _test_future('rss');
-
-  is($cal_f->decoded_content, 'name: cal, URI: /caltest', 'cal');
-is($feeds_f->decoded_content, 'name: feeds, URI: /feedstest', 'feeds');
-  is($rss_f->decoded_content, 'name: rss, URI: /rsstest', 'rss');
+for (qw(cal feeds rss)) {
+   my $name = $_;
+   my $r = LWP::UserAgent->new(
+      ssl_opts => {
+         verify_hostname => 0,
+         SSL_verify_mode => SSL_VERIFY_NONE,
+         SSL_hostname => "$name.afoolishmanifesto.com",
+      }
+   )->request(
+      HTTP::Request->new(
+         GET => "https://localhost:$https_port/${name}test",
+         [ Host => "$name.afoolishmanifesto.com" ],
+      ),
+   );
+   is($r->decoded_content, "name: $name, URI: /${name}test", $name);
+}
 
 done_testing;
 
-sub _test_httpd {
-   my $name = shift;
-   IO::Async::Process->new(
-      command => [
-         qw(docker run --rm),
-         '--name', "$name-$$",
-         '-e',  "NAME=$name",
-         'httpd-test'
-      ],
-      on_exception => sub { die "$name exited unexpectedly!" },
-      on_finish => sub {},
-      stdout => { on_read => sub {} },
-      stderr => { on_read => sub {} },
-   )
-}
-
-sub _test_future {
-   my $name = shift;
-   my $ua = LWP::UserAgent->new;
-   $ua->ssl_opts(verify_hostname => 0);
-   $ua->ssl_opts(SSL_verify_mode => SSL_VERIFY_NONE);
-   $ua->ssl_opts(SSL_hostname => "$name.afoolishmanifesto.com");
-   $ua
-      ->request(
-         HTTP::Request->new(
-            GET => "https://localhost:$https_port/${name}test",
-            [ Host => "$name.afoolishmanifesto.com" ],
-         ),
-      );
-}
-
 END {
-   undef $_ for $cal, $feeds, $rss, $st, $main;
    for (qw(cal feeds rss st httpd)) {
+      next if fork;
       capture {
-         CORE::system(qw(docker kill), "$_-$$");
-         CORE::system(qw(docker rm), "$_-$$");
+         CORE::system(qw(docker kill), "$_-$parent");
+         CORE::system(qw(docker rm), "$_-$parent");
       };
    }
 }
