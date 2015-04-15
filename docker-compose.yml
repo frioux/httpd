@@ -1,0 +1,38 @@
+httpd:
+   build: .
+   links:
+      - cal
+      - feeds
+      - rss
+      - st
+   ports:
+      - "80:80"
+      - "443:443"
+   # volumes:
+      # - "/usr/local/apache2/ssl/wild.key"
+      # - "/usr/local/apache2/ssl/wild.cert"
+
+cal:
+   image: frew/falcor2
+   volumes:
+      - "/var/run/falcor2:/opt/var"
+      - "/var/log/falcor2:/opt/log"
+
+feeds:
+   image: frew/corn
+   volumes:
+      - "/var/run/corn:/opt/var"
+      - "/var/log/corn:/opt/log"
+
+rss:
+   image: clue/ttrss
+   links:
+      - db
+
+st:
+   image: tianon/syncthing
+
+db:
+   image: mysql
+   environment:
+      MYSQL_ROOT_PASSWORD: test
