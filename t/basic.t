@@ -12,7 +12,7 @@ use Capture::Tiny 'capture';
 use HTTP::Request;
 use LWP::UserAgent;
 
-capture {
+note scalar capture {
    system(qw(docker build -t httpd-test-main .));
    my $d = pushd('t');
    system(qw(docker build -f Dockerfile.test -t httpd-test .));
@@ -34,7 +34,7 @@ for (qw(cal feeds rss st)) {
 
 sleep 3;
 
-capture {
+note scalar capture {
    exec(
       qw(docker run --rm --name), "httpd-$parent",
       '--link',    "st-$parent:st",
@@ -81,7 +81,7 @@ done_testing;
 END {
    for (qw(cal feeds rss st httpd)) {
       next if fork;
-      capture {
+      note scalar capture {
          CORE::system(qw(docker kill), "$_-$parent");
          CORE::system(qw(docker rm), "$_-$parent");
       };
